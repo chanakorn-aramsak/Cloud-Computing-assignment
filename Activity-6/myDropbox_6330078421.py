@@ -2,7 +2,7 @@ import boto3
 import json
 import base64
 import os
-
+from datetime import datetime
 BASE_PATH = '/act5/api/v1'
 GET_PATH = f'{BASE_PATH}/get'
 PUT_PATH = f'{BASE_PATH}/put'
@@ -23,19 +23,15 @@ def list_files_for_owner(owner):
     
     response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefix)
     for obj in response.get('Contents', []):
-        files.append(obj['Key'].split('/')[-1])
-    
+        dateTime = obj['LastModified']
+        stringTime = dateTime.strftime('%Y-%m-%d %H:%M:%S')
+        files.append({
+            "Key":obj['Key'].split('/')[-1], 
+            "Size": obj['Size'], 
+            "LastModified": stringTime})
+        
     return files[1:]
 
-def list_files_shareTo(username):
-    files = []
-    table = dynamo.Table('myDropboxShares')
-    response = table.scan(FilterExpression=Attr('shareTo').eq(username))
-    for item in response['Items']:
-        files.append(item['filename'])
-    for f in files:
-        response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=prefix)
-    return files
 
 def get_file_url(owner, file_name):
     """Generates a presigned URL for downloading a file."""
@@ -87,6 +83,9 @@ def login_user(username, password):
   
     # Instantiate a table resource object
     table = dynamo.Table('myDropboxUsers')
+
+    # Hash the password for comparison
+    # hashed_password = hashlib.sha256(password.encode()).hexdigest()
 
     # Get the user from the database
     response = table.get_item(Key={'username': username})
