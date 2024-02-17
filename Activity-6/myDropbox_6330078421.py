@@ -3,6 +3,8 @@ import json
 import base64
 import os
 from datetime import datetime
+from boto3.dynamodb.conditions import Key
+
 BASE_PATH = '/act5/api/v1'
 GET_PATH = f'{BASE_PATH}/get'
 PUT_PATH = f'{BASE_PATH}/put'
@@ -11,12 +13,39 @@ REGISTER_PATH = f'{BASE_PATH}/register'
 LOGIN_PATH = f'{BASE_PATH}/login'
 SHARE_PATH = f'{BASE_PATH}/share'
 BUCKET_NAME = os.environ['s3_bucket_name']
+
 s3 = boto3.client('s3')
 dynamo = boto3.resource('dynamodb')
 def _get_object_key(owner, file_name):
     """Constructs the object key for a file based on owner and name."""
     return f"{owner}/{file_name}"
 
+
+def list_files_shared_with_user(username):
+    files = []
+    table = dynamo.Table('myDropboxShares')
+    response = table.scan(
+        FilterExpression=Key('shareTo').eq(username)
+    )
+    for item in response['Items']:
+        files.append(item)
+    return files
+
+def convert_sharefile_to_list_files(sharefile):
+    file_list=[]
+    for data in sharefile:
+        file_owner = data['username']
+        filename = data['filename']
+        content = s3.head_object(Bucket = BUCKET_NAME, Key = file_owner + "/" + filename)
+        file_size = content["ContentLength"]
+        last_modified = content["LastModified"].strftime("%Y-%m-%d %H:%M:%S")
+        file_list.append({
+            "Key": filename,
+            "Size": file_size,
+            "LastModified": last_modified,
+            "owner": file_owner
+        })
+    return file_list
 def list_files_for_owner(owner):
     files = []
     prefix = f"{owner}/"  # Assuming folder names are based on owners
@@ -28,18 +57,19 @@ def list_files_for_owner(owner):
         files.append({
             "Key":obj['Key'].split('/')[-1], 
             "Size": obj['Size'], 
-            "LastModified": stringTime})
-        
+            "LastModified": stringTime,
+            "owner": owner
+        })
     return files[1:]
+
+
 
 
 def get_file_url(owner, file_name):
     """Generates a presigned URL for downloading a file."""
-    files = list_files_for_owner(owner)
     file_key = _get_object_key(owner, file_name)
     
-    if file_name not in files:
-        return None
+    
     file_key = f'{owner}/{file_name}'
     try:
         file_url = s3.generate_presigned_url('get_object', Params={'Bucket': BUCKET_NAME, 'Key': file_key}, ExpiresIn=3600)
@@ -47,6 +77,7 @@ def get_file_url(owner, file_name):
     except Exception as e:
         print(f"Error generating URL for {file_key}: {e}")
         return None
+
 
 
 def create_folder(folder_path):
@@ -83,10 +114,7 @@ def login_user(username, password):
   
     # Instantiate a table resource object
     table = dynamo.Table('myDropboxUsers')
-
-    # Hash the password for comparison
-    # hashed_password = hashlib.sha256(password.encode()).hexdigest()
-
+    
     # Get the user from the database
     response = table.get_item(Key={'username': username})
 
@@ -200,7 +228,7 @@ def _handle_get_request(body):
         else:
             return {
                 'statusCode': 404,
-                'body': json.dumps({'error': 'File not found'})
+                'body': json.dumps({'error': file_url})
             }
     except Exception as e:
         print(f"Error handling GET request: {e}")
@@ -222,12 +250,13 @@ def _handle_view_request(body):
             }
 
         files = list_files_for_owner(owner)
+        sharefile = list_files_shared_with_user(owner)
+        file_lists = convert_sharefile_to_list_files(sharefile)
         return {
             'statusCode': 200,
-            'body': json.dumps({'files': files})
+            'body': json.dumps({'files': files, 'sharefile': file_lists})
         }
     except Exception as e:
-        print(f"Error handling VIEW request: {e}")
         return {
             'statusCode': 500,
             'body': json.dumps({'error': 'Error handling VIEW request'})

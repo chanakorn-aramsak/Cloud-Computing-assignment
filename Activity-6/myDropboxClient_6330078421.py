@@ -31,19 +31,44 @@ def make_api_request(method, endpoint, data=None):
         return None, None
 
 def view_files(owner):
-    """Views files for a specific owner."""
+    """Views files and shared files for a specific owner."""
     if not owner:
         print("Owner's name cannot be empty.")
         return
 
     data = {'owner': owner}
-    status_code, files = make_api_request('GET', 'view', data)
-    if status_code == 200 and files:
-        for file in files['files']:
-            print(file['Key'], file['Size'], file['LastModified'], file['Owner'])
+    status_code, response = make_api_request('GET', 'view', data)
+    if status_code == 200 and response:
+        files = response.get('files', [])
+        shared_files = response.get('sharefile', [])
+
+        if files:
+            print("Files:")
+            for file in files:
+                print(file['Key'], file['Size'], file['LastModified'], file["owner"])
+
+        if shared_files:
+            print("Shared Files:")
+            for file in shared_files:
+                print(file['Key'], file['Size'], file['LastModified'], file["owner"])
     else:
         print("No files found for this owner.")
-
+def check_download_permission(owner, file_name):
+    """Checks if the user has permission to download the file."""
+    data = {'owner': owner, 'file_name': file_name}
+    status_code, response = make_api_request('GET', 'view', data)
+    if status_code == 200 and response:
+        files = response.get('files', [])
+        shared_files = response.get('sharefile', [])
+        if files:
+            for file in files:
+                if file['Key'] == file_name:
+                    return True
+        if shared_files:
+            for file in shared_files:
+                if file['Key'] == file_name:
+                    return True
+    return False
 def upload_file(file_name, owner):
     """Uploads a file to the API."""
     file_path = f"./{file_name}"
@@ -82,19 +107,18 @@ def download_file(file_name, owner):
     else:
         print("File not found.")
 
-def share_file(file_name, recipient):
+def share_file(owner,file_name, recipient):
     """Shares a file with another user."""
-    data = {'file_name': file_name, 'recipient': recipient}
+    data = {'owner': owner, 'filename': file_name, 'shareTo': recipient}
     status_code, _ = make_api_request('POST', 'share', data)
     if status_code == 200:
         print(f"File {file_name} shared with {recipient} successfully.")
 
-def new_user(username):
+def new_user(username, password):
     """Creates a new user with the specified username and password."""\
     
     print(f"Creating a new user => {username}")
-    password = input("Enter password: ")
-    confirm_password = input("Confirm password: ")
+    confirm_password = password
 
     if password != confirm_password:
         print("Passwords do not match.")
@@ -117,22 +141,20 @@ def login(username, password):
 
 def logout():
     """Logs out from the application."""
-    status_code, _ = make_api_request('POST', 'logout')
-    if status_code == 200:
-        print("Logged out successfully.")
+    return "BYE"
 
 def main():
     """Handles user interaction in the command-line interface."""
     print("Welcome to myDropbox Application")
     print("============================================")
     print("Available commands:")
-    print("  - newuser username: Create a new user")
+    print("  - newuser username password password: Create a new user")
     print("  - login username password: Login to your account")
     print("  - logout: Logout from your account")
     print("  - put filename: Upload a file")
-    print("  - get filename [username]: Download a file")
-    print("  - view: List your files")
-    print("  - share filename recipient: Share a file with another user")
+    print("  - view: List your files that you have access to")
+    print("  - get filename username: Download a file from specific user owner")
+    print("  - share filename recipientUsername: Share a file with another user")
     print("  - quit: Exit the program")
     print("============================================")
     username = None
@@ -143,8 +165,13 @@ def main():
         if command == "quit":
             print("============================================")
             break
-        elif (split_command[0] == "newuser" and len(split_command) == 2):
-            new_user(split_command[1])
+        elif (split_command[0] == "newuser" and len(split_command) == 4):
+            password = split_command[2]
+            confirm_password = split_command[3]
+            if password != confirm_password:
+                print("Passwords do not match.")
+                continue
+            new_user(split_command[1], password)
         elif (split_command[0] == "login" and len(split_command) == 3):
             login(split_command[1], split_command[2])
             username = split_command[1]
@@ -152,13 +179,28 @@ def main():
             logout()
             username = None
         elif (split_command[0] == "put" and len(split_command) == 2):
+            if (not username):
+                print("Please login first.")
+                continue
             upload_file(split_command[1], username)
         elif (split_command[0] == "get" and len(split_command) == 3):
-            download_file(split_command[1], split_command[2])
+            if (not username):
+                print("Please login first.")
+                continue
+            if (check_download_permission(username, split_command[1])):
+                download_file(split_command[1], split_command[2])
+            else:
+                print("You do not have permission to download this file.")
         elif (split_command[0] == "view"):
-            view_files()
+            if (not username):
+                print("Please login first.")
+                continue
+            view_files(username)
         elif (split_command[0] == "share" and len(split_command) == 3):
-            share_file(split_command[1], split_command[2])
+            if (not username):
+                print("Please login first.")
+                continue
+            share_file(username,split_command[1], split_command[2])
         else:
             print("Invalid command. Please try again.")
 
