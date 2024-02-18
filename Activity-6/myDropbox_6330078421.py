@@ -142,6 +142,10 @@ def sharefile(owner, filename, shareTo):
     share_id = str(uuid.uuid4())
     dynamo = boto3.resource('dynamodb')
     table = dynamo.Table('myDropboxShares')
+    usertable = dynamo.Table('myDropboxUsers')
+    response = usertable.get_item(Key={'username': shareTo})
+    if 'Item' not in response:
+        return False
     try:
         response = table.put_item(
         Item={
@@ -151,9 +155,9 @@ def sharefile(owner, filename, shareTo):
             'shareTo': shareTo
         },
      )
-        return response
+        return True
     except Exception as e:
-        return f"Failed to share file {filename, e}."    
+        return False
 def lambda_handler(event, context):
     """Handles API requests for file operations."""
     try:
@@ -292,7 +296,7 @@ def _handle_register_request(body):
             }
         else:
             return {
-                'statusCode': 400,
+                'statusCode': 409,
                 'body': json.dumps({'error': 'User already exists'})
             }
     except Exception as e:
@@ -352,11 +356,16 @@ def _handle_share_request(body):
                 'body': json.dumps({'error': 'Cannot share with yourself'})
             }
         try:
-            sharefile(owner, filename, shareTo)
-            return {
-                'statusCode': 200,
-                'body': json.dumps({'share': 'OK'})
-            }
+            if sharefile(owner, filename, shareTo):
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps({'share': 'OK'})
+                }
+            else:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({'error': 'Owner user does not exist'})
+                }
         except Exception as e:
             return {
                 'statusCode': 500,
