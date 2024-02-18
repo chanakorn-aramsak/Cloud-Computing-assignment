@@ -115,7 +115,7 @@ def share_file(owner,file_name, recipient):
         print(f"File {file_name} shared with {recipient} successfully.")
 
 def new_user(username, password):
-    """Creates a new user with the specified username and password."""\
+    """Creates a new user with the specified username and password."""
     
     print(f"Creating a new user => {username}")
     confirm_password = password
@@ -126,11 +126,13 @@ def new_user(username, password):
     
     hashed_password = hashlib.sha256(password.encode()).hexdigest()
     data = {'username': username, 'passwordHash': hashed_password}
+
     status_code, _ = make_api_request('POST', 'register', data)
     if status_code == 200:
         print(f"User {username} created successfully.")
-    elif status_code == 409:
+    else:
         print(f"User {username} already exists.")
+    
 
 def login(username, password):
     """Logs in to the application with the specified username and password."""
