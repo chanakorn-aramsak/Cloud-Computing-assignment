@@ -53,20 +53,20 @@ def view_files(owner):
                 print(file['Key'], file['Size'], file['LastModified'], file["owner"])
     else:
         print("No files found for this owner.")
-def check_download_permission(owner, file_name):
+def check_download_permission(username, file_name, owner):
     """Checks if the user has permission to download the file."""
-    data = {'owner': owner, 'file_name': file_name}
+    data = {'owner': username}
     status_code, response = make_api_request('GET', 'view', data)
     if status_code == 200 and response:
         files = response.get('files', [])
         shared_files = response.get('sharefile', [])
         if files:
             for file in files:
-                if file['Key'] == file_name:
+                if file['Key'] == file_name and file['owner'] == owner:
                     return True
         if shared_files:
             for file in shared_files:
-                if file['Key'] == file_name:
+                if file['Key'] == file_name and file['owner'] == owner:
                     return True
     return False
 def upload_file(file_name, owner):
@@ -187,7 +187,7 @@ def main():
             if (not username):
                 print("Please login first.")
                 continue
-            if (check_download_permission(username, split_command[1])):
+            if (check_download_permission(username, split_command[1], split_command[2])):
                 download_file(split_command[1], split_command[2])
             else:
                 print("You do not have permission to download this file.")
