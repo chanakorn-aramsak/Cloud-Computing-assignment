@@ -1,4 +1,5 @@
 login another_user password
 view
 get sample.txt john
+get sample.txt p
 quit
