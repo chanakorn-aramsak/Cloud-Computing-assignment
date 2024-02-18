@@ -109,10 +109,11 @@ def register_user(username, passwordHash):
             'username': username,
             'password': passwordHash
         },
+        ConditionExpression='attribute_not_exists(username)'
     )
         return True
     except Exception as e:
-        return f"Failed to register user {username, e}. User already exists."
+        return False 
     
       
 def login_user(username, password):
@@ -263,7 +264,7 @@ def _handle_view_request(body):
         file_lists = convert_sharefile_to_list_files(sharefile)
         return {
             'statusCode': 200,
-            'body': json.dumps({'files': files, 'sharefile': 55})
+            'body': json.dumps({'files': files, 'sharefile': file_lists})
         }
     except Exception as e:
         return {
@@ -284,11 +285,16 @@ def _handle_register_request(body):
                 'body': json.dumps({'error': 'Missing required fields'})
             }
 
-        response = register_user(username, passwordHash)
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'register': "OK"})
-        }
+        if (register_user(username, passwordHash)):
+            return {
+                'statusCode': 200,
+                'body': json.dumps({'register': "OK"})
+            }
+        else:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'User already exists'})
+            }
     except Exception as e:
         return {
             'statusCode': 500,

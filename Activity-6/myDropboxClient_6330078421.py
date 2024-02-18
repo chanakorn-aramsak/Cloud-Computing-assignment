@@ -129,6 +129,8 @@ def new_user(username, password):
     status_code, _ = make_api_request('POST', 'register', data)
     if status_code == 200:
         print(f"User {username} created successfully.")
+    elif status_code == 409:
+        print(f"User {username} already exists.")
 
 def login(username, password):
     """Logs in to the application with the specified username and password."""
