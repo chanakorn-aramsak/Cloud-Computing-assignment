@@ -1,6 +1,8 @@
 base64
-sentry_sdk
 os
 requests
-python-dotenv
 dotenv
+hashlib
+boto3
+json
+datetime

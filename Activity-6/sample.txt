@@ -1,1 +1,2 @@
-555
+<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>john/sample.txt</Key><RequestId>FM1C8J8BKG1Z4WY5</RequestId><HostId>BOc/DAMpamKBOf9FKyll0A2vNHHVl5NrvtGyZV/w7H3QyLPnH0DZLpNdRE41TvwvxOz/F9299+o=</HostId></Error>

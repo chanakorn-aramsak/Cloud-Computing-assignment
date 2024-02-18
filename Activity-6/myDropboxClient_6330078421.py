@@ -141,7 +141,7 @@ def login(username, password):
 
 def logout():
     """Logs out from the application."""
-    return "BYE"
+    print("BYE")
 
 def main():
     """Handles user interaction in the command-line interface."""
@@ -160,7 +160,7 @@ def main():
     username = None
     while True:
         command = input(">> ")
-        split_command = command.split(" ")
+        split_command = command.strip().split()
 
         if command == "quit":
             print("============================================")
@@ -201,6 +201,10 @@ def main():
                 print("Please login first.")
                 continue
             share_file(username,split_command[1], split_command[2])
+        elif (split_command[0] == "logout"):
+            logout()
+            username = None
+            continue
         else:
             print("Invalid command. Please try again.")
 
