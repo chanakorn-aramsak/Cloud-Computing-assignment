@@ -4,6 +4,7 @@ import base64
 import os
 from datetime import datetime
 from boto3.dynamodb.conditions import Key
+import uuid
 
 BASE_PATH = '/act5/api/v1'
 GET_PATH = f'{BASE_PATH}/get'
@@ -14,14 +15,14 @@ LOGIN_PATH = f'{BASE_PATH}/login'
 SHARE_PATH = f'{BASE_PATH}/share'
 BUCKET_NAME = os.environ['s3_bucket_name']
 
-s3 = boto3.client('s3')
-dynamo = boto3.resource('dynamodb')
+
 def _get_object_key(owner, file_name):
     """Constructs the object key for a file based on owner and name."""
     return f"{owner}/{file_name}"
 
 
 def list_files_shared_with_user(username):
+    dynamo = boto3.resource('dynamodb')
     files = []
     table = dynamo.Table('myDropboxShares')
     response = table.scan(
@@ -32,6 +33,7 @@ def list_files_shared_with_user(username):
     return files
 
 def convert_sharefile_to_list_files(sharefile):
+    s3 = boto3.client('s3')
     file_list=[]
     for data in sharefile:
         file_owner = data['username']
@@ -47,6 +49,7 @@ def convert_sharefile_to_list_files(sharefile):
         })
     return file_list
 def list_files_for_owner(owner):
+    s3 = boto3.client('s3')
     files = []
     prefix = f"{owner}/"  # Assuming folder names are based on owners
     
@@ -68,7 +71,7 @@ def list_files_for_owner(owner):
 def get_file_url(owner, file_name):
     """Generates a presigned URL for downloading a file."""
     file_key = _get_object_key(owner, file_name)
-    
+    s3 = boto3.client('s3')
     
     file_key = f'{owner}/{file_name}'
     try:
@@ -82,6 +85,7 @@ def get_file_url(owner, file_name):
 
 def create_folder(folder_path):
     """Creates a folder in the bucket, ignoring errors if it already exists."""
+    s3 = boto3.client('s3')
     try:
         s3.put_object(Bucket=BUCKET_NAME, Key=folder_path)
     except Exception as e:
@@ -90,6 +94,7 @@ def create_folder(folder_path):
 
 def upload_file_to_s3(file_content, file_key):
     """Uploads a file to S3 with the specified key."""
+    s3 = boto3.client('s3')
     try:
         s3.put_object(Body=file_content, Bucket=BUCKET_NAME, Key=file_key)
     except Exception as e:
@@ -97,6 +102,7 @@ def upload_file_to_s3(file_content, file_key):
 
 def register_user(username, passwordHash):
     """Registers a new user in the database."""
+    dynamo = boto3.resource('dynamodb')
     try:
         table = dynamo.Table('myDropboxUsers')
         response = table.put_item(
@@ -113,6 +119,7 @@ def register_user(username, passwordHash):
 def login_user(username, password):
   
     # Instantiate a table resource object
+    dynamo = boto3.resource('dynamodb')
     table = dynamo.Table('myDropboxUsers')
     
     # Get the user from the database
@@ -132,11 +139,14 @@ def login_user(username, password):
         return False
     
 def sharefile(owner, filename, shareTo):
+    share_id = str(uuid.uuid4())
+    dynamo = boto3.resource('dynamodb')
     table = dynamo.Table('myDropboxShares')
     try:
         response = table.put_item(
         Item={
-            'username': owner,
+            'shareId': share_id,
+            'shareFrom': owner,
             'filename': filename,
             'shareTo': shareTo
         },
@@ -336,15 +346,16 @@ def _handle_share_request(body):
                 'statusCode': 400,
                 'body': json.dumps({'error': 'Cannot share with yourself'})
             }
-        if (sharefile(owner, filename, shareTo)):
+        try:
+            sharefile(owner, filename, shareTo)
             return {
                 'statusCode': 200,
                 'body': json.dumps({'share': 'OK'})
             }
-        else:
+        except Exception as e:
             return {
                 'statusCode': 500,
-                'body': json.dumps({'error': 'Error sharing file'})
+                'body': json.dumps({'error': f'Error sharing file {e}'})
             }
     except Exception as e:
         print(f"Error handling SHARE request: {e}")
