@@ -14,12 +14,11 @@ REGISTER_PATH = f'{BASE_PATH}/register'
 LOGIN_PATH = f'{BASE_PATH}/login'
 SHARE_PATH = f'{BASE_PATH}/share'
 BUCKET_NAME = os.environ['s3_bucket_name']
-
-
+s3 = boto3.client('s3')
+dynamodb = boto3.resource('dynamodb')
 def _get_object_key(owner, file_name):
     """Constructs the object key for a file based on owner and name."""
     return f"{owner}/{file_name}"
-
 
 def list_files_shared_with_user(username):
     dynamo = boto3.resource('dynamodb')
@@ -36,7 +35,7 @@ def convert_sharefile_to_list_files(sharefile):
     s3 = boto3.client('s3')
     file_list=[]
     for data in sharefile:
-        file_owner = data['username']
+        file_owner = data['shareFrom']
         filename = data['filename']
         content = s3.head_object(Bucket = BUCKET_NAME, Key = file_owner + "/" + filename)
         file_size = content["ContentLength"]
@@ -49,7 +48,7 @@ def convert_sharefile_to_list_files(sharefile):
         })
     return file_list
 def list_files_for_owner(owner):
-    s3 = boto3.client('s3')
+    
     files = []
     prefix = f"{owner}/"  # Assuming folder names are based on owners
     
@@ -264,7 +263,7 @@ def _handle_view_request(body):
         file_lists = convert_sharefile_to_list_files(sharefile)
         return {
             'statusCode': 200,
-            'body': json.dumps({'files': files, 'sharefile': file_lists})
+            'body': json.dumps({'files': files, 'sharefile': 55})
         }
     except Exception as e:
         return {
