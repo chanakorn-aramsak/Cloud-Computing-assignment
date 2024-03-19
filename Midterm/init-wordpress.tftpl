@@ -1,0 +1,83 @@
+#!/bin/bash
+# setup public key for ssh
+tee -a /home/ubuntu/.ssh/authorized_keys << EOF
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIODaHqtrCOBpfD+meWggDG5gFEqnNDtpxnqQ7xWIfXfL cloud-wordpress
+EOF
+
+# Database variables
+export DB_HOST=${db_host}
+export DB_NAME=${db_name}
+export DB_USER=${db_user}
+export DB_PASS=${db_pass}
+# Wordpress variables
+export WP_PUBLIC_IP=${wp_public_ip}
+export WP_TITLE=${wp_title}
+export WP_ADMIN_USER=${admin_user}
+export WP_ADMIN_PASS=${admin_pass}
+# S3 variables
+export IAM_S3_ACCESS_KEY=${access_key}
+export IAM_S3_SECRET_KEY=${secret_key}
+export BUCKET_NAME=${bucket_name}
+export REGION=${region}
+export COPY_TO_S3=true
+export SERVE_FROM_S3=true
+
+# install php8.1 and apache2
+sudo sed -i "/#\$nrconf{restart} = 'i';/s/.*/\$nrconf{restart} = 'a';/" /etc/needrestart/needrestart.conf
+sudo apt update
+sudo apt install -y apache2
+sudo apt install -y php8.1 php8.1-curl php8.1-gd php8.1-mbstring php8.1-xml php8.1-xmlrpc php8.1-soap php8.1-intl php8.1-zip php8.1-mysql libapache2-mod-php
+sudo systemctl restart apache2
+
+# Changing Apache2 directory
+sudo chmod 777 /etc/apache2/mods-enabled/dir.conf
+echo "<IfModule mod_dir.c>
+    DirectoryIndex index.php index.html index.cgi index.pl index.xhtml index.htm
+</IfModule>
+# vim: syntax=apache ts=4 sw=4 sts=4 sr noet" | sudo tee -a /etc/apache2/mods-enabled/dir.conf > /dev/null
+sudo chmod 644 /etc/apache2/mods-enabled/dir.conf
+sudo systemctl restart apache2
+
+# download wordpress
+sudo chmod 777 /etc/apache2/sites-available/000-default.conf
+sudo sed '1 a <Directory /var/www/html>' /etc/apache2/sites-available/000-default.conf -i
+sudo sed '2 a AllowOverride All' /etc/apache2/sites-available/000-default.conf -i
+sudo sed '3 a </Directory>' /etc/apache2/sites-available/000-default.conf -i
+sudo chmod 644 /etc/apache2/sites-available/000-default.conf
+sudo a2enmod rewrite
+sudo systemctl restart apache2
+curl -O https://wordpress.org/latest.tar.gz
+tar xzf latest.tar.gz
+touch wordpress/.htaccess
+cp wordpress/wp-config-sample.php wordpress/wp-config.php
+mkdir wordpress/wp-content/upgrade
+sudo cp -a wordpress/. /var/www/html
+sudo chown -R www-data:www-data /var/www/html
+sudo find /var/www/html/ -type d -exec chmod 750 {} \;
+sudo find /var/www/html/ -type f -exec chmod 640 {} \;
+
+# Set up database
+sudo sed -i "s/define( 'DB_NAME', 'database_name_here' );/define( 'DB_NAME', '$DB_NAME' );/" /var/www/html/wp-config.php
+sudo sed -i "s/define( 'DB_USER', 'username_here' );/define( 'DB_USER', '$DB_USER' );/" /var/www/html/wp-config.php
+sudo sed -i "s/define( 'DB_PASSWORD', 'password_here' );/define( 'DB_PASSWORD', '$DB_PASS' );/" /var/www/html/wp-config.php
+sudo sed -i "s/define( 'DB_HOST', 'localhost' );/define( 'DB_HOST', '$DB_HOST' );/" /var/www/html/wp-config.php
+# Set up S3
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  ) ) );" /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'serve-from-s3' => $SERVE_FROM_S3," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'copy-to-s3' => $COPY_TO_S3," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'region' => '$REGION'," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'bucket' => '$BUCKET_NAME'," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'secret-access-key' => '$IAM_S3_SECRET_KEY'," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'access-key-id' => '$IAM_S3_ACCESS_KEY'," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\  'provider' => 'aws'," /var/www/html/wp-config.php
+sudo sed -i "/define( 'WP_DEBUG', false );/a\define( 'AS3CF_SETTINGS', serialize( array (" /var/www/html/wp-config.php
+sudo systemctl restart apache2
+
+# install wordpress with wp-cli
+curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+chmod +x wp-cli.phar
+sudo mv wp-cli.phar /usr/local/bin/wp
+sudo wp core install --path=/var/www/html --allow-root --url=$WP_PUBLIC_IP --title=$WP_TITLE --admin_user=$WP_ADMIN_USER --admin_password=$WP_ADMIN_PASS --admin_email=$WP_ADMIN_USER@$WP_PUBLIC_IP
+sudo wp plugin install amazon-s3-and-cloudfront --path=/var/www/html --allow-root --activate
+sudo systemctl restart apache2
+EOF

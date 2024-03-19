@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# setup public key for ssh
+tee -a /home/ubuntu/.ssh/authorized_keys << EOF
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIODaHqtrCOBpfD+meWggDG5gFEqnNDtpxnqQ7xWIfXfL click@archlinux
+EOF
+
+# install mariadb
+sudo apt update
+sudo apt install -y mariadb-server
+sudo systemctl start mariadb
+sudo systemctl enable mariadb
+
+# create db user
+cat <<SQL > setup.sql
+CREATE USER '${database_user}'@'localhost' IDENTIFIED BY '${database_pass}';
+CREATE DATABASE \`${database_name}\`;
+GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO '${database_user}'@'localhost';
+CREATE USER '${database_user}'@'%' IDENTIFIED BY '${database_pass}';
+GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO '${database_user}'@'%';
+FLUSH PRIVILEGES;
+SQL
+sudo mysql -u root < setup.sql
+
+config_path="/etc/mysql/mariadb.conf.d/50-server.cnf"
+# allow remote connections
+contents=""
+while IFS= read -r line; do
+    if [[ $line == *"bind-address"* ]]; then
+        line="bind-address = 0.0.0.0"
+    fi
+    contents="$contents$line\n"
+done < "$config_path"
+
+echo -e "$contents" | sudo tee "$config_path" > /dev/null
+
+sudo systemctl restart mariadb
